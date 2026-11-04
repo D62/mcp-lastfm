@@ -162,7 +162,55 @@ export function buildServer(client, defaultUser) {
         const r = await client.call("chart.getTopArtists", { limit: limit ?? 20 });
         return list(r.artists.artist).map((x) => ({ artist: x.name, listeners: x.listeners, plays: x.playcount }));
     }));
+    server.registerTool("lastfm_artist_chart_between", {
+        title: "Top artists between two dates",
+        description: "Top artists of a user between two dates (UTC, inclusive), by plays. Use this for a calendar year (from 2026-01-01) or any custom period. Defaults to your own account and to today as the end date.",
+        inputSchema: {
+            user: z.string().min(1).optional(),
+            from: z.string().describe("YYYY-MM-DD, start of the period (inclusive)"),
+            to: z.string().optional().describe("YYYY-MM-DD, end of the period (inclusive). Defaults to now."),
+            limit: limit,
+        },
+    }, ({ user, from, to, limit }) => run(async () => {
+        const start = dateToUnix(from, "start");
+        const end = to ? dateToUnix(to, "end") : Math.floor(Date.now() / 1000);
+        if (end < start)
+            throw new Error("'to' must be on or after 'from'.");
+        const r = await client.call("user.getWeeklyArtistChart", {
+            user: who(user),
+            from: start,
+            to: end,
+        });
+        // Sum per artist in case the same artist appears in several entries.
+        const totals = new Map();
+        for (const a of list(r.weeklyartistchart?.artist)) {
+            const name = a.name ?? "";
+            totals.set(name, (totals.get(name) ?? 0) + Number(a.playcount ?? 0));
+        }
+        const ranked = [...totals.entries()].sort((x, y) => y[1] - x[1]);
+        const total = ranked.reduce((sum, [, plays]) => sum + plays, 0);
+        return {
+            from,
+            to: to ?? "now",
+            totalPlays: total,
+            artists: ranked.slice(0, limit ?? 10).map(([artist, plays]) => ({
+                artist,
+                plays,
+                share: total ? `${((plays / total) * 100).toFixed(1)}%` : "0%",
+            })),
+        };
+    }));
     return server;
+}
+// YYYY-MM-DD to a Unix timestamp: start of that UTC day, or its last second when `edge` is "end".
+export function dateToUnix(date, edge) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!m)
+        throw new Error("Dates must be in YYYY-MM-DD format.");
+    const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (Number.isNaN(ms))
+        throw new Error(`Invalid date: ${date}`);
+    return Math.floor(ms / 1000) + (edge === "end" ? 86399 : 0);
 }
 async function main() {
     const apiKey = process.env.LASTFM_API_KEY ?? "";

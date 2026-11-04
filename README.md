@@ -33,6 +33,7 @@ Any user (pass `user`), or your own account when `LASTFM_USERNAME` is set:
 - `lastfm_top_albums`: top albums over a period.
 - `lastfm_top_tracks`: top tracks over a period.
 - `lastfm_loved_tracks`: loved tracks.
+- `lastfm_artist_chart_between`: top artists between two dates (`from`, optional `to`, `YYYY-MM-DD`, UTC, inclusive). Use it for a calendar year, for example `from: 2026-01-01`. The period tools above only go back 12 months.
 
 Music data (no account needed):
 
@@ -46,6 +47,7 @@ Music data (no account needed):
 - **Read-only.** No tool scrobbles, loves, or changes anything on Last.fm. Writes need a signed session, which this server does not implement.
 - **No user search.** The API has no way to list or search all users. You need the exact username.
 - **Periods can be empty.** A user with no scrobbles in a period gets an empty list, not an error.
+- **Calendar periods.** `lastfm_top_*` only take rolling periods (up to 12 months). For a calendar year or a custom range, use `lastfm_artist_chart_between`, which covers artists only.
 - **Unknown users and artists** return a "not found" error.
 - **Rate limit.** Last.fm asks for at most about 5 requests per second. The client waits 250 ms between requests.
 
@@ -69,5 +71,5 @@ If `dist/` is out of date, the server runs old code.
 
 ## Status
 
-- Unit tests pass with mocked HTTP (7 tests).
-- Live checks: profile, recent tracks, top artists (empty for the last month, correct for that account), artist info, similar artists, global chart, and the not-found error.
+- Unit tests pass with mocked HTTP (8 tests).
+- Live checks: profile, recent tracks, top artists (empty for the last month, correct for that account), artist info, similar artists, global chart, the not-found error, and the artist chart for 2026.

@@ -66,6 +66,7 @@ test("tool list is read-only", async () => {
   const names = tools.map((t) => t.name).sort();
   assert.deepEqual(names, [
     "lastfm_album_info",
+    "lastfm_artist_chart_between",
     "lastfm_artist_info",
     "lastfm_chart_top_artists",
     "lastfm_get_user",
@@ -113,6 +114,48 @@ test("a user argument overrides the default, and a missing user is an error", as
   const r = await mcp.callTool({ name: "lastfm_recent_tracks", arguments: { user: "someone" } });
   assert.match(textOf(r), /Cosmic Girl/);
   assert.equal(new URL(calls[0]).searchParams.get("user"), "someone");
+  await mcp.close();
+});
+
+test("artist chart between two dates sums plays, ranks, and sends UTC timestamps", async () => {
+  const calls: string[] = [];
+  const mcp = await connect(
+    async (url) => {
+      calls.push(url);
+      return json({
+        weeklyartistchart: {
+          artist: [
+            { name: "Beck", playcount: "100" },
+            { name: "Hermanos Gutiérrez", playcount: "270" },
+            { name: "Beck", playcount: "20" },
+            { name: "Muse", playcount: "30" },
+          ],
+        },
+      });
+    },
+    "defaultuser",
+  );
+  const r = await mcp.callTool({
+    name: "lastfm_artist_chart_between",
+    arguments: { from: "2026-01-01", to: "2026-12-31", limit: 2 },
+  });
+  const data = JSON.parse(textOf(r));
+  assert.equal(data.totalPlays, 420);
+  assert.equal(data.artists[0].artist, "Hermanos Gutiérrez");
+  assert.equal(data.artists[1].artist, "Beck");
+  assert.equal(data.artists[1].plays, 120);
+  assert.equal(data.artists.length, 2);
+
+  const u = new URL(calls[0]);
+  assert.equal(u.searchParams.get("method"), "user.getWeeklyArtistChart");
+  assert.equal(u.searchParams.get("user"), "defaultuser");
+  assert.equal(u.searchParams.get("from"), "1767225600"); // 2026-01-01T00:00:00Z
+  assert.equal(u.searchParams.get("to"), String(Date.UTC(2026, 11, 31) / 1000 + 86399));
+
+  const bad = await mcp.callTool({ name: "lastfm_artist_chart_between", arguments: { from: "01/01/2026" } });
+  assert.equal(bad.isError, true);
+  const reversed = await mcp.callTool({ name: "lastfm_artist_chart_between", arguments: { from: "2026-06-01", to: "2026-01-01" } });
+  assert.equal(reversed.isError, true);
   await mcp.close();
 });
 
